@@ -1,0 +1,30 @@
+{
+  "canisters": {
+    "multichain_backend": {
+      "candid": "src/multichain_backend/multichain_backend.did",
+      "package": "multichain_backend",
+      "type": "rust"
+    },
+    "multichain_frontend": {
+      "dependencies": [
+        "multichain_backend"
+      ],
+      "frontend": {
+        "entrypoint": "src/multichain_frontend/src/index.html"
+      },
+      "source": [
+        "src/multichain_frontend/assets",
+        "dist/multichain_frontend/"
+      ],
+      "type": "assets"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
