@@ -14,6 +14,8 @@ To learn more before you start working with multichain, see the following docume
 - [Candid Introduction](https://internetcomputer.org/docs/candid-guide/candid-intro)
 - [JavaScript API Reference](https://erxue-5aaaa-aaaab-qaagq-cai.raw.ic0.app)
 
+This project is gonna be divided into multiple canisters , one canister for one chain . Currently figuring out how ot sign a transaction in ethereum.
+
 If you want to start working on your project right away, you might want to try the following commands:
 
 ```bash

@@ -2,7 +2,7 @@
 .vscode/
 .idea/
 **/*~
-
+.env
 # Mac OSX temporary files
 .DS_Store
 **/.DS_Store
