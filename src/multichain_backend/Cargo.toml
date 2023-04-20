@@ -17,3 +17,7 @@ ic-cdk-macros = "0.6.0"
 tiny-keccak = { version = "2.0.1", features = ["keccak"] }
 ethereum-tx-sign = "6.1.1"
 rlp = "0.5.2"
+sha2 = "0.10.6"
+tx-from-scratch = "0.1.0"
+[dev-dependencies]
+ethereum-types = "0.14.1"

@@ -149,6 +149,12 @@ async fn public_key() -> Result<PublicKeyReply,String>{
         eth_address:address
     })
 }
+fn sha256(input: &Vec<u8>) -> Vec<u8> {
+    use sha2::{Digest,Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(&input);
+    hasher.finalize().to_vec()
+}
 
 #[update]
 async fn sign() -> Result<SignOutput,String>{
@@ -165,11 +171,26 @@ async fn sign() -> Result<SignOutput,String>{
         value:1675538,
     };
     let rlp_parts = tx_lecasy.rlp_parts();
-    let rlp_encoded = rlp_encode_parts(&rlp_parts);
+    let rlp_encoded  = rlp_encode_parts(&rlp_parts);
     let hex_string = hex::encode(rlp_encoded);
+    let hex_decode = hex::decode(hex_string).map_err(|e| format!("hex::decode failed: {}", e))?;
+    let hash = sha256(&hex_decode);
+    let request = SignWithECDSA {
+        message_hash: sha256(&hash).to_vec(),
+        derivation_path: vec![],
+        key_id: EcdsaKeyIds::TestKeyLocalDevelopment.to_key_id(),
+    };
+    let (response,): (SignWithECDSAReply,) = ic_cdk::api::call::call_with_payment(
+        mgmt_canister_id(),
+        "sign_with_ecdsa",
+        (request,),
+        25_000_000_000,
+    )
+    .await
+    .map_err(|e| format!("sign_with_ecdsa failed {}", e.1))?;
     Ok(
         SignOutput{
-            tx_sign:hex_string
+            tx_sign:hex::encode(&response.signature)
         }
     )
 }
@@ -183,3 +204,5 @@ fn keccak256(bytes: &[u8]) -> [u8; 32] {
     hasher.finalize(&mut output);
     output
 }
+
+
