@@ -245,8 +245,8 @@ async fn sign() -> Result<SignOutput,String>{
     let rpc_request = RpcRequest{
         id:"1".into(),
         jsonrpc:"2.0".into(),
-        method:"eth_sendRawTransaction".into(),
-        params:vec![Value::String(final_tx.into())]
+        method:"eth_gasPrice".into(),
+        params:vec![]
     };
     let json_rpc = serde_json::to_vec(
         &rpc_request
