@@ -1,16 +1,29 @@
 
-use ic_cdk::export::{
+use ic_cdk::{export::{
     candid::{CandidType,candid_method,types::number::Nat},
     serde::{Deserialize,Serialize},
     Principal,
-};
+}, api::call::reply_raw, print};
 use ic_cdk::{query,update};
 use std::str::FromStr;
 use std::cell::RefCell;
-
-use ethereum_tx_sign::{LegacyTransaction,Transaction};
+use tx_from_scratch::Transaction;
+// use ethereum_types::H160;
+// use ethereum_tx_sign::{LegacyTransaction,Transaction};
 use rlp::{RlpStream, Encodable};
 use std::convert::TryInto;
+use serde_json::Value;
+
+use ic_cdk::api::management_canister::http_request::{
+    CanisterHttpRequestArgument,
+    HttpHeader,
+    HttpMethod,
+    HttpResponse,
+    http_request,
+    TransformFunc,
+    TransformContext,
+    TransformArgs
+};
 
 fn convert(slice: &[u8]) -> [u8; 20] {
     slice.try_into().expect("slice with incorrect length")
@@ -155,44 +168,121 @@ fn sha256(input: &Vec<u8>) -> Vec<u8> {
     hasher.update(&input);
     hasher.finalize().to_vec()
 }
-
+#[derive(serde::Serialize, serde::Deserialize)]
+struct RpcRequest {
+    jsonrpc: String,
+    method: String,
+    params: Vec<Value>,
+    id: String,
+}
+#[query]
+fn transform(raw: TransformArgs) -> HttpResponse {
+    let mut res = HttpResponse {
+        status: raw.response.status.clone(),
+        ..Default::default()
+    };
+    if res.status == 200 {
+        res.body = raw.response.body;
+    } else {
+        ic_cdk::api::print(format!("Received an error from jsonropc: err = {:?}", raw));
+    }
+    res
+}
 #[update]
 async fn sign() -> Result<SignOutput,String>{
     let address_to = "0x64aDb30D59b2dF0bd0433660Ba6c641B156974f9";
     let to_address_bytes = hex::decode(&address_to[2..]).map_err(|e| format!("hex::decode failed: {}", e))?;
+    let chain_id = 1;
+    let tx = Transaction{
+        chain_id: chain_id,
+        data: Vec::new(),
+        gas_price: 46,
+        gas: 200,
+        value:3000000,
+        nonce:0,
+        to: Some(convert(to_address_bytes.as_slice()))
 
-    let tx_lecasy = LegacyTransaction{
-        chain : 1,
-        nonce: 1,
-        to: Some(convert(to_address_bytes.as_slice())),
-        data:vec![],
-        gas: 21000,
-        gas_price:10_00_00_00_00,
-        value:1675538,
     };
-    let rlp_parts = tx_lecasy.rlp_parts();
-    let rlp_encoded  = rlp_encode_parts(&rlp_parts);
-    let hex_string = hex::encode(rlp_encoded);
-    let hex_decode = hex::decode(hex_string).map_err(|e| format!("hex::decode failed: {}", e))?;
-    let hash = sha256(&hex_decode);
+    let hash = tx.hash();
     let request = SignWithECDSA {
-        message_hash: sha256(&hash).to_vec(),
+        message_hash : hash,
         derivation_path: vec![],
-        key_id: EcdsaKeyIds::TestKeyLocalDevelopment.to_key_id(),
+        key_id: EcdsaKeyIds::TestKeyLocalDevelopment.to_key_id()
     };
     let (response,): (SignWithECDSAReply,) = ic_cdk::api::call::call_with_payment(
         mgmt_canister_id(),
-        "sign_with_ecdsa",
-        (request,),
-        25_000_000_000,
-    )
-    .await
-    .map_err(|e| format!("sign_with_ecdsa failed {}", e.1))?;
-    Ok(
-        SignOutput{
-            tx_sign:hex::encode(&response.signature)
+         "sign_with_ecdsa",
+          (request,), 
+          25_000_000_000
+        )
+        .await
+        .map_err(|e| format!("Sign in with ecdsa failed {}",e.1))?;
+    
+        let v = ( chain_id * 2 )+35;
+        let r = response.signature[0..32].to_vec();
+        let s = response.signature[32..64].to_vec();
+        let mut stream = RlpStream::new();
+        stream.begin_unbounded_list();
+        stream.append(&tx.nonce);
+        stream.append(&tx.gas_price);
+        stream.append(&tx.gas_price);
+        stream.append(&tx.gas);
+        if tx.to.is_none(){
+            stream.append(&Vec::new());
         }
-    )
+        else{
+            stream.append(&tx.to.unwrap().to_vec());
+        }
+        stream.append(&tx.value);
+        stream.append(&tx.data);
+        stream.append(&v);
+        stream.append(&r);
+        stream.append(&s);
+        stream.finalize_unbounded_list();
+    let stream_out =    stream.out().to_vec();
+    let tx_sign =  hex::encode(&stream_out);
+    let final_tx = format!("{}{}","0x",tx_sign);
+    let rpc_request = RpcRequest{
+        id:"1".into(),
+        jsonrpc:"2.0".into(),
+        method:"eth_sendRawTransaction".into(),
+        params:vec![Value::String(final_tx.into())]
+    };
+    let json_rpc = serde_json::to_vec(
+        &rpc_request
+    ).map_err(|e| format!("hex::decode failed: {}", e))?;
+    let request = CanisterHttpRequestArgument{
+        url:"https://goerli.infura.io/v3/260bec7447134609a3d9488ae6481170".to_string(),
+        max_response_bytes: Some(400000),
+        method:HttpMethod::POST,
+        headers:vec![
+            HttpHeader{
+                name:"Content-Type".to_string(),
+                value:"application/json".to_string()
+            }
+        ],
+        body: Some(
+            json_rpc
+        ),
+        transform:Some(TransformContext::new(transform, vec![]))
+        
+    };
+    
+    match http_request(request).await {
+        Ok((result,))=>{
+            
+            Ok(SignOutput{
+                tx_sign:format!("{:?}",result.body)
+            })
+        }
+        Err((r, m)) => {
+            let message =
+                format!("The http_request resulted into error. RejectionCode: {r:?}, Error: {m}");
+            Err(message)
+        }
+    }
+    
+   
 }
 
 
