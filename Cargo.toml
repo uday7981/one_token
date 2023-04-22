@@ -1,4 +1,4 @@
 [workspace]
 members = [
-    "src/multichain_backend",
+    "src/ethereum/multichain_backend",
 ]

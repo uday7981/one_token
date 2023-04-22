@@ -21,5 +21,7 @@ sha2 = "0.10.6"
 tx-from-scratch = "0.1.0"
 secp256k1 = { version = "0.25.0", features = ["default", "recovery"] }
 serde_json = "1.0.39"
+ic-web3 = { git = "https://github.com/rocklabs-io/ic-web3" }
+
 [dev-dependencies]
 ethereum-types = "0.14.1"
